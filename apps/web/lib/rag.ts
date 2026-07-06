@@ -60,7 +60,7 @@ export async function triggerIngestion(
 export async function queryRAG(
   question: string,
   documentId?: string,
-  topK: number = 8
+  topK: number = 4
 ): Promise<RAGResult> {
   try {
     const res = await fetch(`${INGESTION_API_URL}/query`, {

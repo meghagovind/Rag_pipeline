@@ -8,12 +8,13 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 
 const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN;
+const IS_VERCEL_DEPLOYMENT = process.env.VERCEL === "1";
 
 export async function uploadFile(
   file: File
 ): Promise<{ url: string; pathname: string }> {
   // ── Vercel Blob (production) ──────────────────────
-  if (BLOB_TOKEN) {
+  if (IS_VERCEL_DEPLOYMENT && BLOB_TOKEN) {
     const blob = await put(file.name, file, {
       access: "public",
       token: BLOB_TOKEN,

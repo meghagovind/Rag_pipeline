@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from typing import Any
 
 
+@lru_cache(maxsize=1)
 def get_embed_model() -> Any:
-    """Create the configured Hugging Face text embedding model.
+    """Return the shared Hugging Face text embedding model.
 
     Transformers probes torchvision when it is installed, even though this
     pipeline only embeds text. A mismatched optional torchvision wheel should

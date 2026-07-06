@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -66,7 +67,7 @@ class QueryRequest(BaseModel):
 
     question: str
     document_id: Optional[str] = None
-    top_k: int = 8
+    top_k: int = 4
 
 
 class QueryResponse(BaseModel):
@@ -82,6 +83,14 @@ class HealthResponse(BaseModel):
     status: str
     service: str
     version: str
+
+
+@lru_cache(maxsize=1)
+def get_retriever():
+    """Keep the embedding model, database pool, and Ollama client warm."""
+    from rag.retriever import Retriever
+
+    return Retriever()
 
 
 # ── Routes ────────────────────────────────────────────────────────
@@ -132,9 +141,7 @@ async def query_documents(request: QueryRequest):
     Query the RAG pipeline: retrieve similar chunks and generate an answer.
     """
     try:
-        from rag.retriever import Retriever
-
-        retriever = Retriever()
+        retriever = get_retriever()
         result = retriever.query(
             question=request.question,
             document_id=request.document_id,

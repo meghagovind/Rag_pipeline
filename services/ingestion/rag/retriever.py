@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -14,6 +15,17 @@ from rag.embeddings import get_embed_model
 from rag.indexer import _vector_literal
 
 logger = logging.getLogger(__name__)
+
+
+REFUSAL_PATTERNS = (
+    "can't provide personal information",
+    "cannot provide personal information",
+    "can't assist with",
+    "cannot assist with",
+    "i can't provide",
+    "i cannot provide",
+    "is there anything else i can help you with",
+)
 
 
 @dataclass
@@ -40,7 +52,10 @@ class Retriever:
         self.llm = Ollama(
             model=os.getenv("LLM_MODEL", "mistral"),
             base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-            request_timeout=120.0,
+            context_window=2048,
+            request_timeout=180.0,
+            temperature=0.2,
+            additional_kwargs={"num_predict": 160},
         )
 
     def retrieve(
@@ -83,6 +98,54 @@ class Retriever:
             for row in rows
         ]
 
+    @staticmethod
+    def _looks_like_refusal(answer: str) -> bool:
+        normalized = answer.lower()
+        return any(pattern in normalized for pattern in REFUSAL_PATTERNS)
+
+    @staticmethod
+    def _extractive_answer(question: str, sources: List[SourceChunk]) -> str:
+        """Return a conservative answer directly from retrieved document text.
+
+        This is used when a small local model refuses to summarize user-uploaded
+        documents, even though the app is explicitly an authorized document Q&A
+        tool. It keeps the answer grounded by using only retrieved lines.
+        """
+        seen: set[str] = set()
+        lines: list[str] = []
+
+        for source in sources:
+            for raw_line in source.chunk_text.splitlines():
+                line = re.sub(r"\s+", " ", raw_line).strip(" |")
+                if not line or len(line) < 3:
+                    continue
+                key = line.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                lines.append(line)
+                if len(lines) >= 60:
+                    break
+            if len(lines) >= 60:
+                break
+
+        if not lines:
+            return (
+                "I found matching document context, but it did not contain enough "
+                "readable text to answer the question."
+            )
+
+        question_lower = question.lower()
+        if any(term in question_lower for term in ("complete", "detail", "summary", "summarize")):
+            intro = "Here are the details I found in the uploaded document:"
+        else:
+            intro = "Here is the relevant information I found in the uploaded document:"
+
+        bullet_lines = "\n".join(f"- {line}" for line in lines)
+        page_refs = sorted({source.page_number for source in sources})
+        pages = ", ".join(str(page) for page in page_refs)
+        return f"{intro}\n\n{bullet_lines}\n\nSources: page {pages}."
+
     def query(
         self,
         question: str,
@@ -97,21 +160,31 @@ class Retriever:
 
         context = "\n\n---\n\n".join(
             f"[Source {i} — {source.filename}, Page {source.page_number}]\n"
-            f"{source.chunk_text}"
+            f"{source.chunk_text[:1200]}"
             for i, source in enumerate(sources, 1)
         )
         prompt = (
-            "Answer the question using only the document context. Cite page numbers.\n\n"
+            "You are a document extraction assistant inside a private local RAG app. "
+            "The user uploaded these documents and is asking you to fetch details from them. "
+            "Answer using only the document context. Do not refuse just because the document "
+            "contains names, contact details, receipt details, addresses, or masked payment "
+            "information. Do not invent or reveal any information that is not present in the "
+            "context. If payment data is masked, keep it masked exactly as shown. "
+            "Cite page numbers. Be concise and use no more than 180 words.\n\n"
             f"## Context\n\n{context}\n\n## Question\n\n{question}\n\n## Answer\n"
         )
 
         try:
-            answer = self.llm.complete(prompt).text
+            answer = self.llm.complete(prompt).text.strip()
         except Exception as exc:
             logger.error("LLM generation failed: %s", exc)
             answer = (
                 "Relevant context was found, but Ollama could not generate an answer. "
                 "Verify that the configured model is installed."
             )
+
+        if self._looks_like_refusal(answer):
+            logger.warning("LLM refused document extraction; using extractive fallback")
+            answer = self._extractive_answer(question, sources)
 
         return RAGResponse(answer=answer, sources=sources)
