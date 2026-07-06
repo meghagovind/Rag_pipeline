@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Base ──────────────────────────────────────── */
+:root {
+  --surface: #0a0a0f;
+  --surface-50: #12121a;
+  --surface-100: #1a1a26;
+  --surface-200: #22222f;
+  --surface-300: #2a2a38;
+  --accent: #6c63ff;
+  --accent-light: #8b83ff;
+  --accent-glow: rgba(108, 99, 255, 0.15);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  background: var(--surface);
+  color: #e4e4ec;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Glass card ────────────────────────────────── */
+@layer components {
+  .glass-card {
+    @apply rounded-2xl border border-white/[0.06] bg-surface-50/60 backdrop-blur-md;
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300
+      hover:border-accent/30 hover:shadow-[0_0_30px_rgba(108,99,255,0.12)];
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl
+      bg-accent px-6 py-3 font-medium text-white
+      transition-all duration-300
+      hover:bg-accent-light hover:shadow-[0_0_24px_rgba(108,99,255,0.35)]
+      active:scale-[0.97];
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl
+      border border-white/10 bg-surface-100 px-6 py-3 font-medium text-white/80
+      transition-all duration-300
+      hover:border-white/20 hover:bg-surface-200 hover:text-white;
+  }
+
+  .input-field {
+    @apply w-full rounded-xl border border-white/10 bg-surface-100
+      px-4 py-3 text-white placeholder-white/30
+      outline-none transition-all duration-300
+      focus:border-accent/50 focus:ring-2 focus:ring-accent/20;
+  }
+
+  .status-badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1
+      text-xs font-medium uppercase tracking-wider;
+  }
+}
+
+/* ── Scrollbar ─────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* ── Markdown content ──────────────────────────── */
+.prose-rag h1,
+.prose-rag h2,
+.prose-rag h3 {
+  color: #f0f0f8;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+.prose-rag p {
+  margin-bottom: 0.75em;
+  line-height: 1.7;
+}
+.prose-rag ul,
+.prose-rag ol {
+  padding-left: 1.5em;
+  margin-bottom: 0.75em;
+}
+.prose-rag code {
+  background: var(--surface-200);
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+.prose-rag pre {
+  background: var(--surface-100);
+  padding: 1em;
+  border-radius: 0.75rem;
+  overflow-x: auto;
+  margin-bottom: 1em;
+}

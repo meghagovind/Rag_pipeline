@@ -1,0 +1,12 @@
+.env
+*.log
+node_modules/
+.next/
+apps/web/.next/
+apps/web/generated/prisma/
+apps/web/uploads/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+venv/
+.venv/

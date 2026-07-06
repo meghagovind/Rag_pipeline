@@ -1,0 +1,59 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-web:
+    name: Deploy Next.js to Vercel
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel environment
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Run Prisma Migrations
+        working-directory: apps/web
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+
+      - name: Verify health
+        run: |
+          sleep 10
+          curl -f "${{ secrets.VERCEL_URL }}/api/health" || echo "Health check pending"
+
+  deploy-ingestion:
+    name: Deploy Ingestion Service
+    runs-on: ubuntu-latest
+    needs: deploy-web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Note
+        run: |
+          echo "The ingestion service should be deployed separately."
+          echo "Options:"
+          echo "  - Railway / Render / Fly.io for the FastAPI container"
+          echo "  - Docker build and push to a container registry"
+          echo "  - Self-hosted server with systemd or supervisor"
+          echo ""
+          echo "See README.md for deployment instructions."

@@ -1,0 +1,88 @@
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../apps/web/generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+enum JobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model Document {
+  id        String         @id @default(uuid()) @db.Uuid
+  filename  String
+  fileUrl   String         @map("file_url")
+  status    JobStatus      @default(PENDING)
+  createdAt DateTime       @default(now()) @map("created_at")
+  pages     DocumentPage[]
+  chunks    DocumentChunk[]
+  jobs      IngestionJob[]
+
+  @@map("documents")
+}
+
+model DocumentPage {
+  id         String   @id @default(uuid()) @db.Uuid
+  documentId String   @map("document_id") @db.Uuid
+  pageNumber Int      @map("page_number")
+  rawText    String   @map("raw_text") @db.Text
+  markdown   String   @db.Text
+  layoutJson Json     @map("layout_json")
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("document_pages")
+}
+
+model DocumentChunk {
+  id         String                      @id @default(uuid()) @db.Uuid
+  documentId String                      @map("document_id") @db.Uuid
+  pageNumber Int                         @map("page_number")
+  chunkText  String                      @map("chunk_text") @db.Text
+  metadata   Json
+  embedding  Unsupported("vector(384)")?
+  document   Document                    @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("document_chunks")
+}
+
+model IngestionJob {
+  id          String    @id @default(uuid()) @db.Uuid
+  documentId  String    @map("document_id") @db.Uuid
+  status      JobStatus @default(PENDING)
+  error       String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+  document    Document  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("ingestion_jobs")
+}
+
+model ChatSession {
+  id        String        @id @default(uuid()) @db.Uuid
+  createdAt DateTime      @default(now()) @map("created_at")
+  messages  ChatMessage[]
+
+  @@map("chat_sessions")
+}
+
+model ChatMessage {
+  id        String      @id @default(uuid()) @db.Uuid
+  sessionId String      @map("session_id") @db.Uuid
+  role      String
+  content   String      @db.Text
+  sources   Json?
+  createdAt DateTime    @default(now()) @map("created_at")
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@map("chat_messages")
+}
