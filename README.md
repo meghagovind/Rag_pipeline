@@ -1,6 +1,8 @@
 # DocRAG — Open-Source Document RAG System
 
-A production-ready **Retrieval-Augmented Generation** system for document retrieval and Q&A.
+A production-ready **Retrieval-Augmented Generation** system for document retrieval and Q&A across PDFs, CSVs, SQL files, text/code files, spreadsheets, images, and other readable formats.
+
+Full project knowledge source: [docs/PROJECT_DOCUMENTATION.md](docs/PROJECT_DOCUMENTATION.md)
 
 | Layer | Technology |
 |-------|-----------|
@@ -9,8 +11,8 @@ A production-ready **Retrieval-Augmented Generation** system for document retrie
 | Database | Neon Postgres + pgvector |
 | RAG Framework | LlamaIndex |
 | Embeddings | BAAI/bge-small-en-v1.5 (384-dim) |
-| LLM | Mistral / Llama 3.1 / Qwen 2.5 via Ollama |
-| Parsing | pdfplumber, pytesseract, camelot-py |
+| LLM | Ollama with `llama3.2:1b` locally; larger models like Mistral can be used with stronger hardware |
+| Parsing | pdfplumber, pypdf, pytesseract, generic text/data/code parser, basic DOCX/XLSX extraction |
 | Storage | Vercel Blob / local filesystem |
 | CI/CD | GitHub Actions → Vercel |
 
@@ -19,12 +21,12 @@ A production-ready **Retrieval-Augmented Generation** system for document retrie
 ## Architecture
 
 ```
-User uploads PDF
+User uploads a readable file
  → Next.js API receives file
  → File stored in Vercel Blob (or local)
  → Ingestion API (FastAPI) parses document
-    → PDF text extraction (pdfplumber / pypdf)
-    → OCR for scanned pages (pytesseract)
+    → PDF text extraction (pdfplumber / pypdf), or generic text/data/code parsing
+    → OCR for scanned PDFs/images (pytesseract)
     → Layout analysis → Markdown
     → Table / form extraction (camelot / pdfplumber)
  → Chunking via LlamaIndex SentenceSplitter
@@ -33,7 +35,7 @@ User uploads PDF
 
 User asks question
  → Query embedding generated
- → pgvector similarity search (top_k=8)
+ → pgvector similarity search (top_k=4 by default)
  → LlamaIndex retriever fetches matching chunks
  → Open-source LLM generates answer with citations
  → Answer returned with source chunks + page numbers
@@ -141,7 +143,7 @@ python main.py
 ### 5. Start Ollama
 
 ```bash
-ollama pull mistral
+ollama pull llama3.2:1b
 ollama serve
 # → http://localhost:11434
 ```
@@ -190,7 +192,7 @@ In Vercel project settings → Environment Variables:
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob token |
 | `INGESTION_API_URL` | URL of your FastAPI service |
 | `OLLAMA_BASE_URL` | Ollama endpoint |
-| `LLM_MODEL` | e.g. `mistral` |
+| `LLM_MODEL` | e.g. `llama3.2:1b` locally |
 | `EMBED_MODEL` | e.g. `BAAI/bge-small-en-v1.5` |
 
 ### 4. Deploy

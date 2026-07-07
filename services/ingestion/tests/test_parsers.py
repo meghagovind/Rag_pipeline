@@ -11,6 +11,7 @@ import pytest
 
 from parsers.form_parser import FormParser
 from parsers.layout_parser import LayoutParser
+from parsers.text_parser import TextParser
 
 
 # ── Layout Parser Tests ───────────────────────────────────────────
@@ -93,3 +94,38 @@ class TestFormParser:
         md = FormParser._to_markdown_table(headers, rows)
         assert "Col1" in md
         assert "| a | b |" in md
+
+
+class TestTextParser:
+    def test_csv_file_is_converted_to_markdown_table(self, tmp_path):
+        file_path = tmp_path / "people.csv"
+        file_path.write_text("name,age\nAlice,30\nBob,25\n", encoding="utf-8")
+
+        pages = TextParser().parse(file_path)
+
+        assert len(pages) == 1
+        assert "Delimited data file: people.csv" in pages[0].raw_text
+        assert "| name | age |" in pages[0].raw_text
+        assert "| Alice | 30 |" in pages[0].raw_text
+
+    def test_sql_file_is_read_as_text(self, tmp_path):
+        file_path = tmp_path / "schema.sql"
+        file_path.write_text(
+            "CREATE TABLE users (id INT, email TEXT);\nSELECT * FROM users;",
+            encoding="utf-8",
+        )
+
+        pages = TextParser().parse(file_path)
+
+        assert len(pages) == 1
+        assert "CREATE TABLE users" in pages[0].raw_text
+        assert "SELECT * FROM users" in pages[0].raw_text
+
+    def test_json_file_is_pretty_printed(self, tmp_path):
+        file_path = tmp_path / "data.json"
+        file_path.write_text('{"name":"Alice","age":30}', encoding="utf-8")
+
+        pages = TextParser().parse(file_path)
+
+        assert '"name": "Alice"' in pages[0].raw_text
+        assert '"age": 30' in pages[0].raw_text

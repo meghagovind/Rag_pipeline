@@ -44,8 +44,9 @@ export default function HomePage() {
           </span>
         </h1>
         <p className="mt-4 max-w-2xl text-lg text-white/50">
-          Upload PDFs, extract text with OCR &amp; layout parsing, and chat with
-          your documents using LlamaIndex, pgvector, and open-source LLMs.
+          Upload PDFs, CSVs, SQL files, text, code, and other readable files,
+          then chat with your documents using LlamaIndex, pgvector, and
+          open-source LLMs.
         </p>
 
         <div className="mt-8 flex gap-4">

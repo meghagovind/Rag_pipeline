@@ -14,13 +14,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      return NextResponse.json(
-        { error: "Only PDF files are supported" },
-        { status: 400 }
-      );
-    }
-
     // 1. Upload file to storage
     const { url } = await uploadFile(file);
 

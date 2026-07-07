@@ -75,7 +75,8 @@ export default function UploadPage() {
       <div className="text-center">
         <h1 className="font-display text-4xl font-bold">Upload Document</h1>
         <p className="mt-2 text-white/50">
-          Upload a PDF to extract, index, and chat with its contents.
+          Upload PDFs, CSVs, SQL files, text, code, spreadsheets, and other
+          readable documents to index and chat with their contents.
         </p>
       </div>
 
@@ -120,14 +121,16 @@ export default function UploadPage() {
               <span className="font-medium text-accent">Click to upload</span>{" "}
               or drag &amp; drop
             </p>
-            <p className="text-sm text-white/30">PDF files up to 50 MB</p>
+            <p className="text-sm text-white/30">
+              PDF, CSV, SQL, TXT, MD, JSON, XML, HTML, DOCX, XLSX, images, and code files
+            </p>
           </div>
         )}
 
         <input
           id="file-upload"
           type="file"
-          accept=".pdf"
+          accept=".pdf,.txt,.md,.markdown,.csv,.tsv,.sql,.json,.jsonl,.xml,.html,.htm,.log,.docx,.xlsx,.png,.jpg,.jpeg,.webp,.bmp,.tif,.tiff,.py,.js,.jsx,.ts,.tsx,.java,.c,.cpp,.h,.hpp,.cs,.go,.rs,.rb,.php,.swift,.kt,.kts,.r,.sh,.bash,.zsh,.ps1,.bat,.cmd,.yaml,.yml,.toml,.ini,.cfg,.conf,.env,.css,.scss,.sass,.less,.svg"
           className="absolute inset-0 cursor-pointer opacity-0"
           onChange={handleFileChange}
         />

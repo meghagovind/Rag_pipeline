@@ -1,21 +1,23 @@
 """
-Ingestion Orchestrator — coordinates the full document ingestion pipeline:
-  1. Download file
-  2. PDF text extraction
-  3. OCR (if needed)
-  4. Layout analysis → Markdown
-  5. Table / form extraction
-  6. Chunking + embedding via LlamaIndex
-  7. Storage in Neon Postgres (pgvector)
+Ingestion orchestrator.
+
+Coordinates the full document ingestion pipeline:
+  1. Download or locate the uploaded file.
+  2. Extract readable text from PDF, text/code/data, Office XML, or image files.
+  3. Run OCR where appropriate.
+  4. Convert extracted text into markdown-like page content.
+  5. Extract table/form-like content when possible.
+  6. Chunk and embed the content.
+  7. Store pages, chunks, and embeddings in Postgres + pgvector.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import tempfile
 import uuid
-import json
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -25,6 +27,8 @@ from parsers.form_parser import FormParser
 from parsers.layout_parser import LayoutParser
 from parsers.ocr_parser import OCRParser
 from parsers.pdf_parser import PDFParser
+from parsers.text_parser import TEXT_EXTENSIONS, TextParser
+
 logger = logging.getLogger(__name__)
 
 
@@ -98,14 +102,13 @@ async def run_ingestion(
     db_update_callback=None,
 ) -> Dict[str, Any]:
     """
-    Run the full ingestion pipeline for a single document.
+    Run the full ingestion pipeline for a single uploaded file.
 
     Args:
         document_id: UUID of the document row.
         filename: Original filename.
-        file_url: URL to download the file from (Vercel Blob / S3).
-        db_update_callback: Optional async callable(document_id, status, error)
-                            to update the ingestion job row.
+        file_url: Local path or remote URL for the uploaded file.
+        db_update_callback: Optional async callback for tests/alternate runners.
 
     Returns:
         Dict with ingestion results and stats.
@@ -118,32 +121,12 @@ async def run_ingestion(
         else:
             _update_status(document_id, "PROCESSING")
 
-        # 1. Download file to a temp location
         file_path = await _download_file(file_url, filename)
         logger.info("Downloaded file to %s", file_path)
 
-        # 2. PDF text extraction
-        pdf_parser = PDFParser()
-        page_results = pdf_parser.parse(file_path)
-        logger.info("Extracted %d pages from PDF", len(page_results))
+        suffix = file_path.suffix.lower()
+        page_results = _extract_pages(file_path, filename)
 
-        # 3. OCR — run on pages with very little text (likely scanned)
-        ocr_parser = OCRParser()
-        for page in page_results:
-            if len(page.raw_text.strip()) < 50:
-                ocr_results = ocr_parser.ocr_pdf(file_path)
-                for ocr_page in ocr_results:
-                    # Merge OCR text into pages with missing text
-                    matching = [
-                        p
-                        for p in page_results
-                        if p.page_number == ocr_page.page_number
-                    ]
-                    if matching and len(matching[0].raw_text.strip()) < 50:
-                        matching[0].raw_text = ocr_page.ocr_text
-                break  # Only run OCR once for the whole document
-
-        # 4. Layout analysis — convert raw text to Markdown
         layout_parser = LayoutParser()
         parsed_pages: List[Dict[str, Any]] = []
         for page in page_results:
@@ -158,26 +141,13 @@ async def run_ingestion(
                 }
             )
 
-        # 5. Table / form extraction
-        form_parser = FormParser()
-        try:
-            extracted_tables = form_parser.extract_tables(file_path)
-            for table in extracted_tables:
-                # Attach table markdown to the corresponding page
-                for page_data in parsed_pages:
-                    if page_data["page_number"] == table.page_number:
-                        if page_data["tables_markdown"]:
-                            page_data["tables_markdown"] += "\n\n" + table.markdown
-                        else:
-                            page_data["tables_markdown"] = table.markdown
-        except Exception as exc:
-            logger.warning("Table extraction failed: %s", exc)
+        _attach_tables(file_path, suffix, page_results, parsed_pages)
 
         # Store the parsed representation before creating embeddings.
         _replace_pages(document_id, parsed_pages)
 
-        # 6. & 7. Chunk + embed + store via LlamaIndex. Import lazily so the
-        # health endpoint starts without loading the full ML runtime.
+        # Chunk + embed + store. Import lazily so /health starts without loading
+        # the full ML runtime.
         from rag.indexer import Indexer
 
         indexer = Indexer()
@@ -219,9 +189,67 @@ async def run_ingestion(
         }
 
 
+def _extract_pages(file_path: Path, filename: str):
+    """Extract page-like text sections from supported file formats."""
+    suffix = file_path.suffix.lower()
+    if suffix == ".pdf":
+        pdf_parser = PDFParser()
+        page_results = pdf_parser.parse(file_path)
+        logger.info("Extracted %d pages from PDF", len(page_results))
+
+        # Run OCR once for scanned PDFs with little/no text.
+        ocr_parser = OCRParser()
+        for page in page_results:
+            if len(page.raw_text.strip()) < 50:
+                ocr_results = ocr_parser.ocr_pdf(file_path)
+                for ocr_page in ocr_results:
+                    matching = [
+                        p
+                        for p in page_results
+                        if p.page_number == ocr_page.page_number
+                    ]
+                    if matching and len(matching[0].raw_text.strip()) < 50:
+                        matching[0].raw_text = ocr_page.ocr_text
+                break
+        return page_results
+
+    text_parser = TextParser()
+    page_results = text_parser.parse(file_path)
+    logger.info("Extracted %d text sections from %s", len(page_results), filename)
+    return page_results
+
+
+def _attach_tables(file_path: Path, suffix: str, page_results, parsed_pages) -> None:
+    """Attach table markdown from PDFs or text-like files to parsed pages."""
+    form_parser = FormParser()
+    try:
+        if suffix == ".pdf":
+            extracted_tables = form_parser.extract_tables(file_path)
+        elif suffix in TEXT_EXTENSIONS:
+            extracted_tables = []
+            for page in page_results:
+                extracted_tables.extend(
+                    form_parser.extract_tables_from_text(
+                        page.raw_text,
+                        page_number=page.page_number,
+                    )
+                )
+        else:
+            extracted_tables = []
+
+        for table in extracted_tables:
+            for page_data in parsed_pages:
+                if page_data["page_number"] == table.page_number:
+                    if page_data["tables_markdown"]:
+                        page_data["tables_markdown"] += "\n\n" + table.markdown
+                    else:
+                        page_data["tables_markdown"] = table.markdown
+    except Exception as exc:
+        logger.warning("Table extraction failed: %s", exc)
+
+
 async def _download_file(file_url: str, filename: str) -> Path:
-    """Download a file from a URL to a temp directory."""
-    # If it's already a local path, just return it
+    """Download a file from a URL to a temp directory, or return a local path."""
     if os.path.exists(file_url):
         return Path(file_url)
 

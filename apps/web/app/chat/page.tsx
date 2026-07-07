@@ -149,7 +149,7 @@ export default function ChatPage() {
               Ask a question about your documents
             </p>
             <p className="mt-1 text-sm text-white/30">
-              Answers include page citations from uploaded PDFs
+              Answers include citations from uploaded files
             </p>
           </div>
         )}

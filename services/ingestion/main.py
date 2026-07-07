@@ -7,13 +7,15 @@ from __future__ import annotations
 
 import logging
 import os
+import asyncio
+import threading
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 # Both services share the repository-level environment file.
@@ -109,7 +111,6 @@ async def health_check():
 @app.post("/ingest", response_model=IngestResponse)
 async def ingest_document(
     request: IngestRequest,
-    background_tasks: BackgroundTasks,
 ):
     """
     Trigger document ingestion. The heavy parsing runs as a background task
@@ -121,17 +122,31 @@ async def ingest_document(
         request.filename,
     )
 
-    background_tasks.add_task(
-        run_ingestion,
-        document_id=request.document_id,
-        filename=request.filename,
-        file_url=request.file_url,
-    )
+    def _run_background_ingestion() -> None:
+        try:
+            asyncio.run(
+                run_ingestion(
+                    document_id=request.document_id,
+                    filename=request.filename,
+                    file_url=request.file_url,
+                )
+            )
+        except Exception:
+            logger.exception(
+                "Detached ingestion task failed for document %s",
+                request.document_id,
+            )
+
+    threading.Thread(
+        target=_run_background_ingestion,
+        name=f"ingest-{request.document_id}",
+        daemon=True,
+    ).start()
 
     return IngestResponse(
         document_id=request.document_id,
         status="PROCESSING",
-        message="Ingestion started in background",
+        message="Ingestion accepted and running in background",
     )
 
 
